@@ -1,0 +1,28 @@
+name: Simple Example
+
+# Trigger the workflow on push and pull request events
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  simple-job:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # Step 1: Checkout the repository
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    # Step 2: Echo a simple message
+    - name: Echo message
+      run: echo "Hello from GitHub Actions! Repository has been checked out successfully."
+    
+    # Step 3: Show some basic info about the checked out repo
+    - name: Show repository info
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Files in repository:"
+        ls -la
