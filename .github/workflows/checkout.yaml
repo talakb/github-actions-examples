@@ -1,0 +1,17 @@
+name: Simple Workflow
+
+on:
+  push:
+	branches:
+	  - main
+
+jobs:
+  echo-message:
+	runs-on: ubuntu-latest
+
+	steps:
+	  - name: Check out repository
+		uses: actions/checkout@v4
+
+	  - name: Echo a confirmation message
+		run: echo "Checkout completed successfully."
