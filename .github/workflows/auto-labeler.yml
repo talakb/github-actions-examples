@@ -1,0 +1,192 @@
+name: Auto Labeler
+
+# This workflow demonstrates automatic labeling of PRs and issues
+# Labels based on file changes, PR size, and content analysis
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issues:
+    types: [opened]
+
+jobs:
+  auto-label-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for analysis
+        
+    - name: Analyze PR changes
+      id: analyze
+      run: |
+        # Get list of changed files
+        changed_files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+        echo "Changed files:"
+        echo "$changed_files"
+        
+        # Initialize label arrays
+        labels=()
+        
+        # Check for different types of changes
+        if echo "$changed_files" | grep -q "\.md$"; then
+          labels+=("documentation")
+        fi
+        
+        if echo "$changed_files" | grep -q "\.yml$\|\.yaml$"; then
+          labels+=("ci/cd")
+        fi
+        
+        if echo "$changed_files" | grep -q "\.js$\|\.ts$\|\.jsx$\|\.tsx$"; then
+          labels+=("frontend")
+        fi
+        
+        if echo "$changed_files" | grep -q "\.py$"; then
+          labels+=("python")
+        fi
+        
+        if echo "$changed_files" | grep -q "\.go$"; then
+          labels+=("golang")
+        fi
+        
+        if echo "$changed_files" | grep -q "\.java$"; then
+          labels+=("java")
+        fi
+        
+        if echo "$changed_files" | grep -q "Dockerfile\|docker-compose"; then
+          labels+=("docker")
+        fi
+        
+        if echo "$changed_files" | grep -q "test\|spec"; then
+          labels+=("tests")
+        fi
+        
+        # Check PR size
+        files_changed=$(echo "$changed_files" | wc -l)
+        lines_added=$(git diff --shortstat origin/${{ github.base_ref }}...HEAD | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo "0")
+        lines_deleted=$(git diff --shortstat origin/${{ github.base_ref }}...HEAD | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo "0")
+        
+        echo "Files changed: $files_changed"
+        echo "Lines added: $lines_added"
+        echo "Lines deleted: $lines_deleted"
+        
+        if [ "$files_changed" -le 3 ] && [ "$lines_added" -le 50 ]; then
+          labels+=("size/small")
+        elif [ "$files_changed" -le 10 ] && [ "$lines_added" -le 250 ]; then
+          labels+=("size/medium")
+        else
+          labels+=("size/large")
+        fi
+        
+        # Convert array to comma-separated string
+        label_string=$(IFS=,; echo "${labels[*]}")
+        echo "labels=$label_string" >> $GITHUB_OUTPUT
+        
+    - name: Apply labels (simulation)
+      run: |
+        echo "Would apply the following labels: ${{ steps.analyze.outputs.labels }}"
+        echo "In a real scenario, this would use the GitHub API:"
+        echo "gh pr edit ${{ github.event.number }} --add-label \"${{ steps.analyze.outputs.labels }}\""
+        
+    - name: Comment on PR with analysis
+      run: |
+        cat << EOF > pr_comment.md
+        ## 🏷️ Auto-labeling Analysis
+        
+        This PR has been automatically analyzed:
+        
+        **Labels applied:** ${{ steps.analyze.outputs.labels }}
+        
+        **Change summary:**
+        - Files modified: $(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
+        - Lines added: $(git diff --shortstat origin/${{ github.base_ref }}...HEAD | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo "0")
+        - Lines deleted: $(git diff --shortstat origin/${{ github.base_ref }}...HEAD | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo "0")
+        
+        **Changed files:**
+        \`\`\`
+        $(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+        \`\`\`
+        
+        ---
+        *This comment was generated automatically by the Auto Labeler workflow.*
+        EOF
+        
+        echo "Would post this comment to the PR:"
+        cat pr_comment.md
+
+  auto-label-issue:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Analyze issue content
+      id: analyze-issue
+      run: |
+        # Get issue title and body
+        title="${{ github.event.issue.title }}"
+        body="${{ github.event.issue.body }}"
+        
+        echo "Issue title: $title"
+        echo "Issue body length: ${#body}"
+        
+        # Initialize labels array
+        labels=()
+        
+        # Analyze title and body for keywords
+        content="$title $body"
+        
+        if echo "$content" | grep -qi "bug\|error\|broken\|issue\|problem"; then
+          labels+=("bug")
+        fi
+        
+        if echo "$content" | grep -qi "feature\|enhancement\|improvement"; then
+          labels+=("enhancement")
+        fi
+        
+        if echo "$content" | grep -qi "question\|help\|how to"; then
+          labels+=("question")
+        fi
+        
+        if echo "$content" | grep -qi "documentation\|docs\|readme"; then
+          labels+=("documentation")
+        fi
+        
+        if echo "$content" | grep -qi "performance\|slow\|optimization"; then
+          labels+=("performance")
+        fi
+        
+        if echo "$content" | grep -qi "security\|vulnerability\|exploit"; then
+          labels+=("security")
+        fi
+        
+        # Check for priority indicators
+        if echo "$content" | grep -qi "urgent\|critical\|blocker"; then
+          labels+=("priority/high")
+        elif echo "$content" | grep -qi "minor\|nice to have"; then
+          labels+=("priority/low")
+        else
+          labels+=("priority/medium")
+        fi
+        
+        # Convert array to comma-separated string
+        label_string=$(IFS=,; echo "${labels[*]}")
+        echo "labels=$label_string" >> $GITHUB_OUTPUT
+        
+    - name: Apply issue labels (simulation)
+      run: |
+        echo "Would apply the following labels to issue #${{ github.event.issue.number }}: ${{ steps.analyze-issue.outputs.labels }}"
+        echo "Command: gh issue edit ${{ github.event.issue.number }} --add-label \"${{ steps.analyze-issue.outputs.labels }}\""
+        
+    - name: Auto-assign based on labels (simulation)
+      run: |
+        labels="${{ steps.analyze-issue.outputs.labels }}"
+        
+        if echo "$labels" | grep -q "bug"; then
+          echo "Would assign bug triage team"
+        elif echo "$labels" | grep -q "enhancement"; then
+          echo "Would assign feature team"
+        elif echo "$labels" | grep -q "documentation"; then
+          echo "Would assign docs team"
+        fi

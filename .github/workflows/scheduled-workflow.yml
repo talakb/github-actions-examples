@@ -1,0 +1,65 @@
+name: Scheduled Workflow
+
+# This workflow demonstrates scheduled workflows using cron syntax
+# Runs daily at 9 AM UTC and can also be triggered manually
+on:
+  schedule:
+    # Runs daily at 9:00 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  scheduled-job:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Show current time
+      run: |
+        echo "Current UTC time: $(date -u)"
+        echo "Current local time: $(date)"
+        
+    - name: Daily maintenance tasks
+      run: |
+        echo "Running daily maintenance tasks..."
+        echo "1. Checking system health..."
+        echo "2. Cleaning up temporary files..."
+        echo "3. Generating daily report..."
+        
+    - name: Generate daily report
+      run: |
+        mkdir -p reports
+        cat << EOF > reports/daily-report-$(date +%Y-%m-%d).txt
+        Daily Report - $(date +%Y-%m-%d)
+        ================================
+        
+        Repository: $GITHUB_REPOSITORY
+        Branch: $GITHUB_REF_NAME
+        Commit: $GITHUB_SHA
+        
+        System Information:
+        - OS: $(uname -s)
+        - Kernel: $(uname -r)
+        - Architecture: $(uname -m)
+        
+        Disk Usage:
+        $(df -h)
+        
+        Memory Usage:
+        $(free -h)
+        
+        Report generated at: $(date)
+        EOF
+        
+    - name: Upload daily report
+      uses: actions/upload-artifact@v3
+      with:
+        name: daily-report-${{ github.run_number }}
+        path: reports/
+        
+    - name: Cleanup old artifacts (simulation)
+      run: |
+        echo "Simulating cleanup of old artifacts..."
+        echo "This would typically use the GitHub API to remove old artifacts"

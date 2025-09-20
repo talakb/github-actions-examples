@@ -1,0 +1,250 @@
+name: Release Automation
+
+# This workflow demonstrates automated release processes
+# Creates releases, generates changelogs, and handles versioning
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.0.0
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # Validate the release
+  validate-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for changelog
+        
+    - name: Determine version and type
+      id: version
+      run: |
+        if [[ "${{ github.event_name }}" == "push" ]]; then
+          # Extract version from tag
+          version=${GITHUB_REF#refs/tags/v}
+          echo "version=$version" >> $GITHUB_OUTPUT
+          
+          # Check if it's a prerelease (contains alpha, beta, rc, etc.)
+          if [[ "$version" =~ (alpha|beta|rc|dev) ]]; then
+            echo "is-prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is-prerelease=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          # Manual trigger
+          version="${{ github.event.inputs.version }}"
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "is-prerelease=${{ github.event.inputs.prerelease }}" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "Release version: $version"
+        echo "Is prerelease: $([ '${{ steps.version.outputs.is-prerelease }}' == 'true' ] && echo 'yes' || echo 'no')"
+        
+    - name: Validate version format
+      run: |
+        version="${{ steps.version.outputs.version }}"
+        if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+          echo "Error: Invalid version format: $version"
+          echo "Expected format: X.Y.Z or X.Y.Z-suffix"
+          exit 1
+        fi
+
+  # Build and test before release
+  build-and-test:
+    needs: validate-release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js (example)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Create demo package.json
+      run: |
+        cat << EOF > package.json
+        {
+          "name": "github-actions-demo",
+          "version": "${{ needs.validate-release.outputs.version }}",
+          "description": "Demo project for release automation",
+          "main": "index.js",
+          "scripts": {
+            "test": "echo \"Running tests...\" && echo \"All tests passed!\"",
+            "build": "echo \"Building project...\" && mkdir -p dist && echo \"console.log('Hello, World!');\" > dist/index.js"
+          }
+        }
+        EOF
+        
+    - name: Install dependencies
+      run: npm install --no-package-lock
+      
+    - name: Run tests
+      run: npm test
+      
+    - name: Build project
+      run: npm run build
+      
+    - name: Create build artifacts
+      run: |
+        mkdir -p release-artifacts
+        cp -r dist release-artifacts/
+        echo "Release v${{ needs.validate-release.outputs.version }}" > release-artifacts/VERSION
+        echo "Built at: $(date)" >> release-artifacts/BUILD_INFO
+        echo "Commit: $GITHUB_SHA" >> release-artifacts/BUILD_INFO
+        tar -czf release-artifacts/dist-${{ needs.validate-release.outputs.version }}.tar.gz -C dist .
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-artifacts
+        path: release-artifacts/
+
+  # Generate changelog
+  generate-changelog:
+    needs: validate-release
+    runs-on: ubuntu-latest
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Generate changelog
+      id: changelog
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        
+        # Get the previous tag
+        previous_tag=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        echo "Generating changelog for version $version"
+        echo "Previous tag: ${previous_tag:-'Initial release'}"
+        
+        # Generate changelog content
+        cat << EOF > CHANGELOG.md
+        # Release v$version
+        
+        **Release Date:** $(date '+%Y-%m-%d')
+        **Commit:** $GITHUB_SHA
+        
+        ## Changes in this release
+        
+        EOF
+        
+        if [ -n "$previous_tag" ]; then
+          echo "### Commits since $previous_tag:" >> CHANGELOG.md
+          git log --pretty=format:"- %s (%h)" $previous_tag..HEAD >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          
+          echo "### Files changed:" >> CHANGELOG.md
+          git diff --name-only $previous_tag..HEAD | sed 's/^/- /' >> CHANGELOG.md
+        else
+          echo "### Initial release" >> CHANGELOG.md
+          echo "- First version of the project" >> CHANGELOG.md
+        fi
+        
+        echo "" >> CHANGELOG.md
+        echo "---" >> CHANGELOG.md
+        echo "*This changelog was generated automatically.*" >> CHANGELOG.md
+        
+        # Output changelog for use in release
+        changelog_content=$(cat CHANGELOG.md)
+        # Use delimiter to handle multiline content
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo "$changelog_content" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+    - name: Upload changelog
+      uses: actions/upload-artifact@v3
+      with:
+        name: changelog
+        path: CHANGELOG.md
+
+  # Create the actual release
+  create-release:
+    needs: [validate-release, build-and-test, generate-changelog]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: release-artifacts
+        path: release-artifacts/
+        
+    - name: Download changelog
+      uses: actions/download-artifact@v3
+      with:
+        name: changelog
+        path: ./
+        
+    - name: Create GitHub Release (simulation)
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        is_prerelease="${{ needs.validate-release.outputs.is-prerelease }}"
+        
+        echo "Creating GitHub release:"
+        echo "Version: v$version"
+        echo "Prerelease: $is_prerelease"
+        echo ""
+        echo "Release notes:"
+        cat CHANGELOG.md
+        echo ""
+        echo "Artifacts to upload:"
+        ls -la release-artifacts/
+        echo ""
+        echo "In a real scenario, this would use:"
+        echo "gh release create v$version release-artifacts/* \\"
+        echo "  --title 'Release v$version' \\"
+        echo "  --notes-file CHANGELOG.md \\"
+        if [ "$is_prerelease" == "true" ]; then
+          echo "  --prerelease"
+        fi
+        
+    - name: Update version in files (simulation)
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        echo "Would update version to $version in:"
+        echo "- package.json"
+        echo "- version.py"
+        echo "- pom.xml"
+        echo "- etc."
+        
+    - name: Notify stakeholders (simulation)
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        echo "Would send notifications about release v$version to:"
+        echo "- Slack channels"
+        echo "- Email lists"
+        echo "- Issue/PR mentions"
+        
+    - name: Trigger deployment (simulation)
+      if: needs.validate-release.outputs.is-prerelease == 'false'
+      run: |
+        echo "Would trigger production deployment for stable release"
+        echo "Repository dispatch to deployment workflows"

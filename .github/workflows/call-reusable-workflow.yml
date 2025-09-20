@@ -1,0 +1,140 @@
+name: Call Reusable Workflow
+
+# This workflow demonstrates how to call reusable workflows
+# Shows different ways to use the reusable build workflow
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to build for'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - development
+        - staging
+        - production
+
+jobs:
+  # Call reusable workflow with default parameters
+  build-default:
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      node-version: '18'
+      run-tests: true
+      environment: 'development'
+
+  # Call reusable workflow for different environments
+  build-staging:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      node-version: '18'
+      run-tests: true
+      environment: 'staging'
+
+  build-production:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      node-version: '20'  # Use latest Node.js for production
+      run-tests: true
+      environment: 'production'
+    secrets:
+      BUILD_TOKEN: ${{ secrets.PRODUCTION_BUILD_TOKEN }}
+
+  # Matrix build using reusable workflow
+  matrix-build:
+    strategy:
+      matrix:
+        node-version: ['16', '18', '20']
+        environment: ['development', 'staging']
+        exclude:
+          # Don't build staging with Node 16
+          - node-version: '16'
+            environment: 'staging'
+    
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      node-version: ${{ matrix.node-version }}
+      run-tests: true
+      environment: ${{ matrix.environment }}
+
+  # Use outputs from reusable workflow
+  deploy:
+    needs: build-default
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Download build artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ needs.build-default.outputs.artifact-name }}
+        path: ./deployment
+        
+    - name: Display build information
+      run: |
+        echo "Build Version: ${{ needs.build-default.outputs.build-version }}"
+        echo "Artifact Name: ${{ needs.build-default.outputs.artifact-name }}"
+        echo ""
+        echo "Files in deployment directory:"
+        ls -la ./deployment/
+        echo ""
+        echo "Build info:"
+        cat ./deployment/build-info.json
+        
+    - name: Simulate deployment
+      run: |
+        echo "Deploying version ${{ needs.build-default.outputs.build-version }}..."
+        echo "Deployment would happen here with the built artifacts"
+        echo "Deployment completed successfully!"
+
+  # Conditional reusable workflow call
+  build-manual:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      node-version: '18'
+      run-tests: false  # Skip tests for manual builds
+      environment: ${{ github.event.inputs.environment }}
+
+  # Summary job
+  summary:
+    needs: [build-default, build-staging, build-production, matrix-build]
+    runs-on: ubuntu-latest
+    if: always()  # Run even if some builds failed
+    
+    steps:
+    - name: Build summary
+      run: |
+        echo "# Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Build Job | Status | Version |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Default Build | ${{ needs.build-default.result }} | ${{ needs.build-default.outputs.build-version || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Staging Build | ${{ needs.build-staging.result }} | ${{ needs.build-staging.outputs.build-version || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Production Build | ${{ needs.build-production.result }} | ${{ needs.build-production.outputs.build-version || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Matrix Build | ${{ needs.matrix-build.result }} | Multiple versions |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Count successful builds
+        success_count=0
+        if [ "${{ needs.build-default.result }}" == "success" ]; then success_count=$((success_count + 1)); fi
+        if [ "${{ needs.build-staging.result }}" == "success" ]; then success_count=$((success_count + 1)); fi
+        if [ "${{ needs.build-production.result }}" == "success" ]; then success_count=$((success_count + 1)); fi
+        if [ "${{ needs.matrix-build.result }}" == "success" ]; then success_count=$((success_count + 1)); fi
+        
+        echo "**Successful builds: $success_count**" >> $GITHUB_STEP_SUMMARY
+        
+        if [ $success_count -gt 0 ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Build pipeline completed with $success_count successful builds!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "❌ All builds failed. Please check the logs." >> $GITHUB_STEP_SUMMARY
+        fi

@@ -1,0 +1,196 @@
+name: Conditional Workflows
+
+# This workflow demonstrates various conditional execution patterns
+# Shows if conditions, environment-based execution, and path-based triggers
+on:
+  push:
+    branches: [ main, develop, 'feature/*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      skip-tests:
+        description: 'Skip tests'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  IS_MAIN_BRANCH: ${{ github.ref == 'refs/heads/main' }}
+  IS_PR: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Job that always runs
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.check.outputs.should-deploy }}
+      environment: ${{ steps.check.outputs.environment }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check deployment conditions
+      id: check
+      run: |
+        echo "Event: ${{ github.event_name }}"
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Is main branch: ${{ env.IS_MAIN_BRANCH }}"
+        
+        # Determine if we should deploy
+        if [[ "${{ github.ref_name }}" == "main" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "should-deploy=true" >> $GITHUB_OUTPUT
+        else
+          echo "should-deploy=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Determine environment
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.ref_name }}" == "main" ]]; then
+          echo "environment=production" >> $GITHUB_OUTPUT
+        else
+          echo "environment=staging" >> $GITHUB_OUTPUT
+        fi
+
+  # Conditional job execution
+  test:
+    runs-on: ubuntu-latest
+    # Run tests unless explicitly skipped via workflow_dispatch
+    if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests == 'true') }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run tests
+      run: |
+        echo "Running tests..."
+        echo "Test suite completed!"
+
+  # Job that runs only on main branch
+  main-branch-only:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Main branch specific task
+      run: |
+        echo "This only runs on main branch"
+        echo "Performing main branch specific tasks..."
+
+  # Job that runs only on pull requests
+  pr-only:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: PR specific checks
+      run: |
+        echo "This only runs on pull requests"
+        echo "PR number: ${{ github.event.number }}"
+        echo "PR title: ${{ github.event.pull_request.title }}"
+
+  # Job that runs based on file changes
+  frontend-changes:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2  # Needed to compare with previous commit
+        
+    - name: Check for frontend changes
+      id: changes
+      run: |
+        # Simulate checking for frontend file changes
+        if [[ "${{ github.event_name }}" == "push" ]]; then
+          # In a real scenario, you'd use git diff or a changes detection action
+          echo "frontend-changed=true" >> $GITHUB_OUTPUT
+        else
+          echo "frontend-changed=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Build frontend
+      if: steps.changes.outputs.frontend-changed == 'true'
+      run: |
+        echo "Frontend files changed, building frontend..."
+        echo "Frontend build completed!"
+        
+    - name: Skip frontend build
+      if: steps.changes.outputs.frontend-changed != 'true'
+      run: echo "No frontend changes detected, skipping build"
+
+  # Conditional deployment
+  deploy:
+    needs: [setup, test]
+    runs-on: ubuntu-latest
+    if: needs.setup.outputs.should-deploy == 'true'
+    environment: ${{ needs.setup.outputs.environment }}
+    
+    steps:
+    - name: Deploy to ${{ needs.setup.outputs.environment }}
+      run: |
+        echo "Deploying to: ${{ needs.setup.outputs.environment }}"
+        echo "Deployment started at: $(date)"
+        
+        # Different deployment steps based on environment
+        if [[ "${{ needs.setup.outputs.environment }}" == "production" ]]; then
+          echo "Production deployment - performing additional checks..."
+          echo "Creating production backup..."
+          echo "Deploying with blue-green strategy..."
+        else
+          echo "Staging deployment - fast deployment..."
+          echo "Deploying directly to staging..."
+        fi
+        
+        echo "Deployment completed!"
+
+  # Job with multiple conditions
+  complex-conditions:
+    runs-on: ubuntu-latest
+    # Complex condition: run on main branch pushes OR manual dispatch to production
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    
+    steps:
+    - name: Complex conditional task
+      run: |
+        echo "This job runs with complex conditions"
+        echo "Event: ${{ github.event_name }}"
+        echo "Environment: ${{ github.event.inputs.environment || 'N/A' }}"
+
+  # Job that always runs but has conditional steps
+  always-run-conditional-steps:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Always run step
+      run: echo "This step always runs"
+      
+    - name: Conditional step 1
+      if: success()  # Run if previous steps succeeded
+      run: echo "Previous steps succeeded"
+      
+    - name: Conditional step 2  
+      if: failure()  # Run if any previous step failed
+      run: echo "Some previous step failed"
+      
+    - name: Conditional step 3
+      if: always()  # Always run regardless of previous step status
+      run: echo "This always runs regardless of previous step status"
+      
+    - name: Manual trigger only step
+      if: github.event_name == 'workflow_dispatch'
+      run: echo "This only runs on manual trigger"

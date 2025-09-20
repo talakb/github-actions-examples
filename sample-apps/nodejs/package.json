@@ -1,0 +1,17 @@
+{
+  "name": "github-actions-nodejs-example",
+  "version": "1.0.0",
+  "description": "Sample Node.js application for GitHub Actions examples",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test.js",
+    "lint": "echo 'Linting JavaScript files...' && echo 'No linter configured - install ESLint for real projects'",
+    "build": "echo 'Building application...' && mkdir -p dist && cp *.js dist/"
+  },
+  "keywords": ["github-actions", "nodejs", "example"],
+  "author": "GitHub Actions Examples",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

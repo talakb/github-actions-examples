@@ -1,0 +1,73 @@
+name: Node.js CI
+
+# This workflow demonstrates Node.js CI/CD pipeline
+# Tests multiple Node.js versions and uses npm caching
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**.js'
+      - '**.json'
+      - '**.ts'
+      - '.github/workflows/nodejs-ci.yml'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        node-version: ['16.x', '18.x', '20.x']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        # Exclude specific combinations if needed
+        exclude:
+          - os: windows-latest
+            node-version: '16.x'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Create package.json for demo
+      run: |
+        cat << EOF > package.json
+        {
+          "name": "github-actions-demo",
+          "version": "1.0.0",
+          "description": "Demo project for GitHub Actions",
+          "main": "index.js",
+          "scripts": {
+            "test": "echo \"Running tests...\" && node -e \"console.log('Tests passed!')\"",
+            "lint": "echo \"Running linter...\" && echo \"Linting passed!\"",
+            "build": "echo \"Building project...\" && echo \"Build completed!\""
+          },
+          "dependencies": {},
+          "devDependencies": {}
+        }
+        EOF
+        
+    - name: Install dependencies
+      run: npm ci || npm install
+      
+    - name: Run linter
+      run: npm run lint
+      
+    - name: Run tests
+      run: npm test
+      
+    - name: Build project
+      run: npm run build
+      
+    - name: Show Node.js and npm versions
+      run: |
+        echo "Node.js version: $(node --version)"
+        echo "npm version: $(npm --version)"
+        echo "OS: ${{ matrix.os }}"
