@@ -98,6 +98,20 @@ Sophisticated conditional logic:
 - Manual trigger inputs
 - Complex conditional expressions
 
+### [Reusable Workflows](/.github/workflows/reusable-build.yml)
+Modular workflow components:
+- Parameterized build workflows
+- Input/output handling
+- Secret management
+- Cross-repository reuse
+
+### [Call Reusable Workflow](/.github/workflows/call-reusable-workflow.yml)
+Demonstrates reusable workflow usage:
+- Multiple environment builds
+- Matrix strategies with reusable workflows
+- Output consumption
+- Conditional workflow calls
+
 ## 🛠️ Utility Workflows
 
 ### [Auto Labeler](/.github/workflows/auto-labeler.yml)
@@ -115,6 +129,78 @@ Complete release automation:
 - Build artifact creation
 - GitHub release creation
 - Notification systems
+
+### [Code Quality Checks](/.github/workflows/code-quality.yml)
+Comprehensive quality analysis:
+- Linting and formatting checks
+- Security vulnerability scanning
+- Code complexity analysis
+- Documentation quality assessment
+- Automated quality reporting
+
+### [Security Scanning](/.github/workflows/security-scan.yml)
+Multi-layered security analysis:
+- Dependency vulnerability scanning
+- Code security analysis (SAST)
+- Container security scanning
+- Automated security reporting
+- Remediation recommendations
+
+### [Deploy to Pages](/.github/workflows/deploy-to-pages.yml)
+GitHub Pages deployment:
+- Static site generation
+- Automated documentation deployment
+- Multi-environment support
+- Custom domain configuration
+
+## 📊 Complete Workflow Index
+
+| Category | Workflow | Purpose | Key Features |
+|----------|----------|---------|--------------|
+| **Basic** | [Basic CI](/.github/workflows/basic-ci.yml) | Simple CI demonstration | Basic triggers, environment variables |
+| **Basic** | [Build and Test](/.github/workflows/build-and-test.yml) | Multi-job workflow | Artifacts, dependencies, matrices |
+| **Basic** | [Scheduled Workflow](/.github/workflows/scheduled-workflow.yml) | Cron automation | Scheduled runs, manual triggers |
+| **Language** | [Node.js CI](/.github/workflows/nodejs-ci.yml) | Node.js testing | Multi-version, cross-platform, caching |
+| **Language** | [Python CI](/.github/workflows/python-ci.yml) | Python development | Multiple versions, linting, testing |
+| **Language** | [Docker Workflow](/.github/workflows/docker-workflow.yml) | Container builds | Multi-platform, security scanning |
+| **Advanced** | [Matrix Builds](/.github/workflows/matrix-builds.yml) | Complex matrices | Dynamic generation, includes/excludes |
+| **Advanced** | [Conditional Workflows](/.github/workflows/conditional-workflow.yml) | Conditional logic | Branch conditions, file changes |
+| **Advanced** | [Reusable Build](/.github/workflows/reusable-build.yml) | Reusable components | Parameters, outputs, secrets |
+| **Advanced** | [Call Reusable](/.github/workflows/call-reusable-workflow.yml) | Using reusable workflows | Multiple calls, matrices, outputs |
+| **Utility** | [Auto Labeler](/.github/workflows/auto-labeler.yml) | Automatic labeling | PR analysis, content detection |
+| **Utility** | [Release Automation](/.github/workflows/release-automation.yml) | Release management | Versioning, changelogs, artifacts |
+| **Utility** | [Code Quality](/.github/workflows/code-quality.yml) | Quality analysis | Linting, complexity, documentation |
+| **Utility** | [Security Scanning](/.github/workflows/security-scan.yml) | Security analysis | Dependency, code, container scanning |
+| **Utility** | [Deploy to Pages](/.github/workflows/deploy-to-pages.yml) | Static site deployment | GitHub Pages, documentation |
+
+## 📁 Sample Applications
+
+
+The repository includes sample applications that you can use to test the workflows:
+
+### [Node.js Sample App](/sample-apps/nodejs/)
+- Simple Express-like application with functions to test
+- Unit tests demonstrating testing patterns  
+- Package.json with common npm scripts
+- Demonstrates JavaScript/TypeScript workflow patterns
+
+### [Python Sample App](/sample-apps/python/)
+- Python application with basic functions
+- Comprehensive unit tests using unittest
+- Requirements.txt with development dependencies
+- Demonstrates Python testing and linting workflows
+
+These sample applications are used by the workflows to demonstrate real testing and building scenarios. You can run them locally:
+
+```bash
+# Node.js example
+cd sample-apps/nodejs
+node test.js
+
+# Python example  
+cd sample-apps/python
+python3 test_app.py
+```
 
 ## 🏁 Getting Started
 
@@ -213,11 +299,14 @@ Contributions are welcome! If you have useful workflow examples or improvements:
 3. Add your workflow example with documentation
 4. Submit a pull request
 
+Please read our [Contributing Guidelines](CONTRIBUTING.md) for detailed information on how to contribute effectively.
+
 ### Guidelines for Contributions
 - Include clear documentation and comments
 - Follow the existing naming conventions
 - Test your workflows before submitting
-- Add your example to this README
+- Add your example to this README and the workflow index
+- Ensure security best practices are followed
 
 ## 📚 Additional Resources
 

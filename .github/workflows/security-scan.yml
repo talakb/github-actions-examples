@@ -1,0 +1,417 @@
+name: Security Scanning
+
+# This workflow demonstrates various security scanning techniques
+# Includes dependency scanning, code security analysis, and container scanning
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run security scans weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+permissions:
+  contents: read
+  security-events: write  # Required for uploading SARIF results
+
+jobs:
+  # Dependency vulnerability scanning
+  dependency-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js for dependency scanning
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Create package.json with vulnerable dependencies
+      run: |
+        cat << 'EOF' > package.json
+        {
+          "name": "security-scan-demo",
+          "version": "1.0.0",
+          "description": "Demo for security scanning",
+          "dependencies": {
+            "express": "4.17.1",
+            "lodash": "4.17.15",
+            "moment": "2.24.0",
+            "axios": "0.18.0"
+          },
+          "devDependencies": {
+            "jest": "24.0.0"
+          }
+        }
+        EOF
+        
+    - name: Install dependencies
+      run: npm install
+      
+    - name: Run npm audit
+      run: |
+        echo "🔍 Running npm audit..."
+        npm audit --audit-level=moderate || echo "Vulnerabilities found (expected for demo)"
+        
+    - name: Generate audit report
+      run: |
+        echo "📄 Generating detailed audit report..."
+        npm audit --json > audit-report.json || echo "Report generated with vulnerabilities"
+        
+        # Display summary
+        echo "## Security Audit Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if command -v jq > /dev/null; then
+          vulnerabilities=$(jq '.metadata.vulnerabilities' audit-report.json 2>/dev/null || echo '{}')
+          echo "**Vulnerability Counts:**" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        else
+          echo "Audit report generated (jq not available for parsing)" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: Upload audit report
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-audit-report
+        path: audit-report.json
+
+  # Code security analysis
+  code-security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Create sample code with security issues
+      run: |
+        mkdir -p src
+        
+        # Create JavaScript file with security issues
+        cat << 'EOF' > src/vulnerable.js
+        const express = require('express');
+        const app = express();
+
+        // Security Issue 1: Hardcoded secrets
+        const API_KEY = 'sk-1234567890abcdefghijklmnopqrstuvwxyz';
+        const DATABASE_PASSWORD = 'admin123';
+
+        // Security Issue 2: SQL Injection vulnerability
+        app.get('/user/:id', (req, res) => {
+          const userId = req.params.id;
+          const query = `SELECT * FROM users WHERE id = ${userId}`;
+          // This is vulnerable to SQL injection
+          res.json({ query: query });
+        });
+
+        // Security Issue 3: Command injection vulnerability
+        app.get('/ping/:host', (req, res) => {
+          const host = req.params.host;
+          const { exec } = require('child_process');
+          exec(`ping -c 1 ${host}`, (error, stdout) => {
+            res.json({ result: stdout });
+          });
+        });
+
+        // Security Issue 4: Path traversal vulnerability
+        app.get('/file/:filename', (req, res) => {
+          const filename = req.params.filename;
+          const fs = require('fs');
+          const content = fs.readFileSync(`./uploads/${filename}`, 'utf8');
+          res.send(content);
+        });
+
+        // Security Issue 5: XSS vulnerability
+        app.get('/search', (req, res) => {
+          const query = req.query.q;
+          res.send(`<h1>Search results for: ${query}</h1>`);
+        });
+
+        app.listen(3000);
+        EOF
+        
+        # Create Python file with security issues
+        cat << 'EOF' > src/vulnerable.py
+        import os
+        import subprocess
+        import sqlite3
+        from flask import Flask, request
+
+        app = Flask(__name__)
+
+        # Security Issue 1: Hardcoded credentials
+        SECRET_KEY = 'super-secret-key-12345'
+        DATABASE_URL = 'postgresql://admin:password123@localhost/mydb'
+
+        @app.route('/execute')
+        def execute_command():
+            # Security Issue 2: Command injection
+            cmd = request.args.get('cmd')
+            result = subprocess.run(cmd, shell=True, capture_output=True)
+            return result.stdout
+
+        @app.route('/query')
+        def sql_query():
+            # Security Issue 3: SQL injection
+            user_id = request.args.get('id')
+            conn = sqlite3.connect('users.db')
+            cursor = conn.cursor()
+            query = f"SELECT * FROM users WHERE id = {user_id}"
+            cursor.execute(query)
+            return cursor.fetchall()
+
+        @app.route('/file')
+        def read_file():
+            # Security Issue 4: Path traversal
+            filename = request.args.get('file')
+            with open(f'./data/{filename}', 'r') as f:
+                return f.read()
+
+        if __name__ == '__main__':
+            # Security Issue 5: Debug mode in production
+            app.run(debug=True, host='0.0.0.0')
+        EOF
+        
+    - name: Run security linting (Bandit for Python)
+      run: |
+        pip install bandit
+        echo "🔍 Running Bandit security linter on Python code..."
+        bandit -f json -o bandit-report.json src/vulnerable.py || echo "Security issues found (expected)"
+        bandit src/vulnerable.py || echo "Security issues reported"
+        
+    - name: Simulate JavaScript security scanning
+      run: |
+        echo "🔍 Simulating JavaScript security scan..."
+        echo "## JavaScript Security Issues Found:" >> security-report.md
+        echo "" >> security-report.md
+        echo "1. **Hardcoded API Key** (Line 6): API key hardcoded in source code" >> security-report.md
+        echo "2. **SQL Injection** (Line 12): Direct string interpolation in SQL query" >> security-report.md
+        echo "3. **Command Injection** (Line 20): Unsanitized user input in exec()" >> security-report.md
+        echo "4. **Path Traversal** (Line 28): No validation of file path" >> security-report.md
+        echo "5. **XSS Vulnerability** (Line 36): Unsanitized user input in HTML response" >> security-report.md
+        echo "" >> security-report.md
+        
+    - name: Generate security report
+      run: |
+        echo "## Python Security Issues Found:" >> security-report.md
+        echo "" >> security-report.md
+        echo "1. **Hardcoded Credentials** (Lines 8-9): Database credentials in source code" >> security-report.md
+        echo "2. **Command Injection** (Line 14): Shell=True with user input" >> security-report.md
+        echo "3. **SQL Injection** (Line 22): String formatting in SQL query" >> security-report.md
+        echo "4. **Path Traversal** (Line 29): No path validation for file access" >> security-report.md
+        echo "5. **Debug Mode** (Line 34): Debug mode enabled in production" >> security-report.md
+        echo "" >> security-report.md
+        echo "## Recommendations:" >> security-report.md
+        echo "- Use environment variables for secrets" >> security-report.md
+        echo "- Use parameterized queries for database access" >> security-report.md
+        echo "- Validate and sanitize all user inputs" >> security-report.md
+        echo "- Implement proper access controls" >> security-report.md
+        echo "- Use security-focused linters and scanners" >> security-report.md
+        
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-scan-reports
+        path: |
+          security-report.md
+          bandit-report.json
+
+  # Container security scanning
+  container-security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Create Dockerfile with security issues
+      run: |
+        cat << 'EOF' > Dockerfile.vulnerable
+        # Security Issue 1: Using root user
+        FROM ubuntu:18.04
+
+        # Security Issue 2: Not updating packages
+        RUN apt-get install -y curl wget
+
+        # Security Issue 3: Hardcoded secrets
+        ENV SECRET_KEY=sk-1234567890abcdef
+        ENV DATABASE_PASSWORD=admin123
+
+        # Security Issue 4: Running as root
+        WORKDIR /app
+        COPY . .
+
+        # Security Issue 5: Exposing internal ports
+        EXPOSE 22 3306 5432
+
+        # Security Issue 6: No user specified (runs as root)
+        CMD ["python", "app.py"]
+        EOF
+        
+        # Create a secure Dockerfile for comparison
+        cat << 'EOF' > Dockerfile.secure
+        # Secure Dockerfile example
+        FROM ubuntu:22.04
+
+        # Update packages and remove cache
+        RUN apt-get update && \
+            apt-get install -y --no-install-recommends \
+            python3 \
+            python3-pip && \
+            apt-get clean && \
+            rm -rf /var/lib/apt/lists/*
+
+        # Create non-root user
+        RUN useradd --create-home --shell /bin/bash app
+
+        # Set working directory
+        WORKDIR /app
+
+        # Copy requirements first (better caching)
+        COPY requirements.txt .
+        RUN pip3 install --no-cache-dir -r requirements.txt
+
+        # Copy application code
+        COPY --chown=app:app . .
+
+        # Switch to non-root user
+        USER app
+
+        # Only expose necessary ports
+        EXPOSE 8080
+
+        # Use specific command
+        CMD ["python3", "app.py"]
+        EOF
+        
+    - name: Build vulnerable container
+      run: |
+        echo "🏗️ Building vulnerable container for scanning..."
+        docker build -f Dockerfile.vulnerable -t vulnerable-app:latest .
+        
+    - name: Simulate container security scan
+      run: |
+        echo "🔍 Simulating container security scan..."
+        echo "## Container Security Scan Results" >> container-security-report.md
+        echo "" >> container-security-report.md
+        echo "**Image:** vulnerable-app:latest" >> container-security-report.md
+        echo "**Scan Date:** $(date)" >> container-security-report.md
+        echo "" >> container-security-report.md
+        echo "### Critical Issues Found:" >> container-security-report.md
+        echo "1. **Running as root user** - Container runs with root privileges" >> container-security-report.md
+        echo "2. **Outdated base image** - Ubuntu 18.04 has known vulnerabilities" >> container-security-report.md
+        echo "3. **Hardcoded secrets** - Sensitive data in environment variables" >> container-security-report.md
+        echo "4. **Unnecessary port exposure** - Multiple internal ports exposed" >> container-security-report.md
+        echo "5. **No package updates** - Packages not updated during build" >> container-security-report.md
+        echo "" >> container-security-report.md
+        echo "### Recommendations:" >> container-security-report.md
+        echo "- Use non-root user in container" >> container-security-report.md
+        echo "- Update to latest base image" >> container-security-report.md
+        echo "- Use secrets management for sensitive data" >> container-security-report.md
+        echo "- Only expose necessary ports" >> container-security-report.md
+        echo "- Keep packages updated" >> container-security-report.md
+        
+    - name: Build secure container for comparison
+      run: |
+        echo "🛡️ Building secure container for comparison..."
+        docker build -f Dockerfile.secure -t secure-app:latest . || echo "Secure build failed (missing files, expected)"
+        
+    - name: Compare container configurations
+      run: |
+        echo "" >> container-security-report.md
+        echo "### Secure vs Vulnerable Comparison:" >> container-security-report.md
+        echo "| Aspect | Vulnerable | Secure |" >> container-security-report.md
+        echo "|--------|------------|--------|" >> container-security-report.md
+        echo "| Base Image | ubuntu:18.04 | ubuntu:22.04 |" >> container-security-report.md
+        echo "| User | root | app (non-root) |" >> container-security-report.md
+        echo "| Secrets | Hardcoded | Environment-based |" >> container-security-report.md
+        echo "| Ports | 22, 3306, 5432 | 8080 only |" >> container-security-report.md
+        echo "| Updates | No | Yes |" >> container-security-report.md
+        
+    - name: Upload container security report
+      uses: actions/upload-artifact@v3
+      with:
+        name: container-security-report
+        path: container-security-report.md
+
+  # Security summary report
+  security-summary:
+    needs: [dependency-scan, code-security-scan, container-security-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Download all security reports
+      uses: actions/download-artifact@v3
+      
+    - name: Generate security summary
+      run: |
+        echo "# Security Scan Summary Report" > security-summary.md
+        echo "" >> security-summary.md
+        echo "**Generated:** $(date)" >> security-summary.md
+        echo "**Repository:** ${{ github.repository }}" >> security-summary.md
+        echo "**Commit:** ${{ github.sha }}" >> security-summary.md
+        echo "" >> security-summary.md
+        
+        echo "## Scan Results Overview" >> security-summary.md
+        echo "" >> security-summary.md
+        echo "| Scan Type | Status | Issues Found |" >> security-summary.md
+        echo "|-----------|--------|--------------|" >> security-summary.md
+        echo "| Dependency Scan | ${{ needs.dependency-scan.result }} | Multiple vulnerable dependencies |" >> security-summary.md
+        echo "| Code Security Scan | ${{ needs.code-security-scan.result }} | 10+ security issues |" >> security-summary.md
+        echo "| Container Security Scan | ${{ needs.container-security-scan.result }} | 5 critical issues |" >> security-summary.md
+        echo "" >> security-summary.md
+        
+        echo "## Key Findings" >> security-summary.md
+        echo "" >> security-summary.md
+        echo "### 🚨 Critical Issues:" >> security-summary.md
+        echo "- Hardcoded secrets in source code" >> security-summary.md
+        echo "- SQL injection vulnerabilities" >> security-summary.md
+        echo "- Command injection risks" >> security-summary.md
+        echo "- Container running as root" >> security-summary.md
+        echo "- Outdated dependencies with known CVEs" >> security-summary.md
+        echo "" >> security-summary.md
+        
+        echo "### 📋 Action Items:" >> security-summary.md
+        echo "1. **Immediate:** Remove hardcoded secrets" >> security-summary.md
+        echo "2. **High Priority:** Fix injection vulnerabilities" >> security-summary.md
+        echo "3. **Medium Priority:** Update dependencies" >> security-summary.md
+        echo "4. **Low Priority:** Improve container security" >> security-summary.md
+        echo "" >> security-summary.md
+        
+        echo "### 🛠️ Remediation Steps:" >> security-summary.md
+        echo "- Implement secrets management (GitHub Secrets, HashiCorp Vault)" >> security-summary.md
+        echo "- Use parameterized queries and input validation" >> security-summary.md
+        echo "- Set up automated dependency updates (Dependabot)" >> security-summary.md
+        echo "- Implement security scanning in CI/CD pipeline" >> security-summary.md
+        echo "- Use non-root containers and minimal base images" >> security-summary.md
+        
+    - name: Display security summary
+      run: |
+        echo "📊 Security Summary Generated:"
+        cat security-summary.md
+        
+    - name: Upload security summary
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-summary-report
+        path: security-summary.md
+        
+    - name: Add summary to job
+      run: |
+        echo "## 🔒 Security Scan Completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "The security scan has completed with multiple findings." >> $GITHUB_STEP_SUMMARY
+        echo "This is a demonstration of security scanning capabilities." >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+        echo "1. Review the detailed security reports in the artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "2. Prioritize fixing critical and high-severity issues" >> $GITHUB_STEP_SUMMARY
+        echo "3. Implement automated security scanning in your real projects" >> $GITHUB_STEP_SUMMARY
+        echo "4. Set up monitoring and alerting for security issues" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,218 @@
+name: Deploy to GitHub Pages
+
+# This workflow demonstrates deploying a static site to GitHub Pages
+# Shows how to build and deploy documentation or static websites
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/deploy-to-pages.yml'
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Build job
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Create demo documentation site
+      run: |
+        mkdir -p docs
+        
+        # Create index.html
+        cat << 'EOF' > docs/index.html
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>GitHub Actions Examples</title>
+            <style>
+                body { 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    padding: 2rem;
+                    line-height: 1.6;
+                }
+                .header { 
+                    text-align: center;
+                    border-bottom: 2px solid #eee;
+                    padding-bottom: 2rem;
+                    margin-bottom: 2rem;
+                }
+                .workflow-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                    gap: 1rem;
+                    margin: 2rem 0;
+                }
+                .workflow-card {
+                    border: 1px solid #ddd;
+                    border-radius: 8px;
+                    padding: 1rem;
+                    background: #f9f9f9;
+                }
+                .workflow-title {
+                    color: #0366d6;
+                    margin-top: 0;
+                }
+                code { 
+                    background: #f6f8fa;
+                    padding: 0.2rem 0.4rem;
+                    border-radius: 3px;
+                    font-size: 0.9em;
+                }
+                .badge {
+                    background: #28a745;
+                    color: white;
+                    padding: 0.2rem 0.5rem;
+                    border-radius: 12px;
+                    font-size: 0.8rem;
+                    display: inline-block;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🚀 GitHub Actions Examples</h1>
+                <p>A comprehensive collection of GitHub Actions workflow examples</p>
+                <span class="badge">✨ Auto-deployed with GitHub Actions</span>
+            </div>
+            
+            <h2>📚 Available Examples</h2>
+            
+            <div class="workflow-grid">
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Basic CI</h3>
+                    <p>Simple continuous integration workflow demonstrating basic concepts and environment variables.</p>
+                    <code>basic-ci.yml</code>
+                </div>
+                
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Node.js CI</h3>
+                    <p>Multi-version Node.js testing with cross-platform support and npm caching.</p>
+                    <code>nodejs-ci.yml</code>
+                </div>
+                
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Python CI</h3>
+                    <p>Python development workflow with multiple versions, linting, and testing frameworks.</p>
+                    <code>python-ci.yml</code>
+                </div>
+                
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Docker Workflow</h3>
+                    <p>Multi-platform Docker image building with security scanning and registry push.</p>
+                    <code>docker-workflow.yml</code>
+                </div>
+                
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Matrix Builds</h3>
+                    <p>Advanced matrix build strategies with dynamic generation and complex configurations.</p>
+                    <code>matrix-builds.yml</code>
+                </div>
+                
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Auto Labeler</h3>
+                    <p>Automatic PR and issue labeling based on content analysis and file changes.</p>
+                    <code>auto-labeler.yml</code>
+                </div>
+                
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Release Automation</h3>
+                    <p>Complete release pipeline with changelog generation and artifact management.</p>
+                    <code>release-automation.yml</code>
+                </div>
+                
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Reusable Workflows</h3>
+                    <p>Modular workflow components that can be shared across multiple projects.</p>
+                    <code>reusable-build.yml</code>
+                </div>
+            </div>
+            
+            <h2>🎯 Getting Started</h2>
+            <ol>
+                <li>Browse the <code>.github/workflows/</code> directory</li>
+                <li>Copy the workflow that matches your needs</li>
+                <li>Customize the workflow for your project</li>
+                <li>Test and deploy!</li>
+            </ol>
+            
+            <h2>📖 Best Practices</h2>
+            <ul>
+                <li><strong>Security:</strong> Use GitHub secrets for sensitive data</li>
+                <li><strong>Performance:</strong> Cache dependencies and use parallel jobs</li>
+                <li><strong>Maintainability:</strong> Use clear naming and documentation</li>
+                <li><strong>Reliability:</strong> Include proper error handling</li>
+            </ul>
+            
+            <footer style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #eee; text-align: center; color: #666;">
+                <p>Built with ❤️ using GitHub Actions • <a href="https://github.com/talakb/github-actions-examples">View on GitHub</a></p>
+                <p>Last updated: <span id="timestamp"></span></p>
+            </footer>
+            
+            <script>
+                document.getElementById('timestamp').textContent = new Date().toLocaleString();
+            </script>
+        </body>
+        </html>
+        EOF
+        
+    - name: Setup Pages
+      uses: actions/configure-pages@v3
+      
+    - name: Build with Jekyll (optional)
+      run: |
+        # For this demo, we're just using static HTML
+        # In a real project, you might build with Jekyll, Next.js, etc.
+        echo "Static site is ready for deployment"
+        ls -la docs/
+        
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: docs/
+
+  # Deployment job
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v2
+      
+    - name: Display deployment URL
+      run: |
+        echo "🎉 Site deployed successfully!"
+        echo "URL: ${{ steps.deployment.outputs.page_url }}"
+        echo ""
+        echo "The site is now available at the above URL."
+        echo "It may take a few minutes for the deployment to be fully active."
