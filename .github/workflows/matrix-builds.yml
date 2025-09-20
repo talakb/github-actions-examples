@@ -1,0 +1,141 @@
+name: Matrix Builds
+
+# This workflow demonstrates advanced matrix build strategies
+# Shows different matrix configurations and combinations
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # Basic matrix with multiple dimensions
+  basic-matrix:
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: ['16', '18', '20']
+        include:
+          # Add specific combinations with additional properties
+          - os: ubuntu-latest
+            node-version: '20'
+            experimental: true
+            upload-coverage: true
+        exclude:
+          # Exclude specific combinations
+          - os: windows-latest
+            node-version: '16'
+      fail-fast: false  # Don't cancel all jobs if one fails
+      max-parallel: 6   # Limit concurrent jobs
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        
+    - name: Show matrix values
+      run: |
+        echo "OS: ${{ matrix.os }}"
+        echo "Node version: ${{ matrix.node-version }}"
+        echo "Experimental: ${{ matrix.experimental }}"
+        echo "Upload coverage: ${{ matrix.upload-coverage }}"
+        
+    - name: Run tests
+      run: |
+        echo "Running tests on ${{ matrix.os }} with Node ${{ matrix.node-version }}"
+        node --version
+        
+    - name: Upload coverage (conditional)
+      if: matrix.upload-coverage == true
+      run: echo "Uploading coverage for experimental build"
+
+  # Dynamic matrix from JSON
+  dynamic-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+    - name: Set matrix
+      id: set-matrix
+      run: |
+        # Create matrix based on conditions
+        if [ "${{ github.event_name }}" == "push" ]; then
+          echo 'matrix={"config":[{"name":"full","tests":"all"},{"name":"smoke","tests":"smoke"}]}' >> $GITHUB_OUTPUT
+        else
+          echo 'matrix={"config":[{"name":"smoke","tests":"smoke"}]}' >> $GITHUB_OUTPUT
+        fi
+
+  use-dynamic-matrix:
+    needs: dynamic-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.dynamic-matrix.outputs.matrix) }}
+    
+    steps:
+    - name: Run tests based on dynamic matrix
+      run: |
+        echo "Running configuration: ${{ matrix.config.name }}"
+        echo "Test suite: ${{ matrix.config.tests }}"
+
+  # Matrix with complex configurations
+  complex-matrix:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - name: "Frontend"
+            path: "frontend"
+            build-cmd: "npm run build"
+            test-cmd: "npm test"
+            artifact: "frontend-dist"
+          - name: "Backend"
+            path: "backend"
+            build-cmd: "go build"
+            test-cmd: "go test"
+            artifact: "backend-binary"
+          - name: "Mobile"
+            path: "mobile"
+            build-cmd: "flutter build"
+            test-cmd: "flutter test"
+            artifact: "mobile-apk"
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup for ${{ matrix.name }}
+      run: |
+        echo "Setting up ${{ matrix.name }}"
+        echo "Path: ${{ matrix.path }}"
+        mkdir -p ${{ matrix.path }}
+        cd ${{ matrix.path }}
+        
+    - name: Build ${{ matrix.name }}
+      run: |
+        echo "Building with: ${{ matrix.build-cmd }}"
+        echo "Simulating build process..."
+        
+    - name: Test ${{ matrix.name }}
+      run: |
+        echo "Testing with: ${{ matrix.test-cmd }}"
+        echo "Simulating test process..."
+        
+    - name: Create artifact
+      run: |
+        mkdir -p artifacts
+        echo "Build artifact for ${{ matrix.name }}" > artifacts/${{ matrix.artifact }}.txt
+        echo "Built at: $(date)" >> artifacts/${{ matrix.artifact }}.txt
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.artifact }}
+        path: artifacts/

@@ -1,0 +1,73 @@
+name: Build and Test
+
+# This workflow demonstrates building and testing a project
+# Shows how to use different job steps and artifacts
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Create build directory
+      run: mkdir -p build
+      
+    - name: Simulate build process
+      run: |
+        echo "Building application..."
+        echo "Build version: 1.0.0" > build/version.txt
+        echo "Build date: $(date)" >> build/version.txt
+        echo "Commit SHA: $GITHUB_SHA" >> build/version.txt
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: build/
+        
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    
+    strategy:
+      matrix:
+        test-suite: [unit, integration, e2e]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifacts
+        path: build/
+        
+    - name: Run ${{ matrix.test-suite }} tests
+      run: |
+        echo "Running ${{ matrix.test-suite }} tests..."
+        echo "Test suite: ${{ matrix.test-suite }}"
+        echo "Simulating test execution..."
+        sleep 2
+        echo "${{ matrix.test-suite }} tests completed successfully!"
+        
+    - name: Generate test report
+      run: |
+        mkdir -p test-reports
+        echo "Test Report for ${{ matrix.test-suite }}" > test-reports/${{ matrix.test-suite }}-report.txt
+        echo "Status: PASSED" >> test-reports/${{ matrix.test-suite }}-report.txt
+        echo "Tests run: 10" >> test-reports/${{ matrix.test-suite }}-report.txt
+        echo "Failures: 0" >> test-reports/${{ matrix.test-suite }}-report.txt
+        
+    - name: Upload test reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-reports-${{ matrix.test-suite }}
+        path: test-reports/

@@ -1,0 +1,184 @@
+name: Reusable Build Workflow
+
+# This is a reusable workflow that can be called from other workflows
+# Demonstrates how to create modular, reusable workflow components
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '18'
+      run-tests:
+        description: 'Whether to run tests'
+        required: false
+        type: boolean
+        default: true
+      environment:
+        description: 'Environment to build for'
+        required: false
+        type: string
+        default: 'development'
+    outputs:
+      build-version:
+        description: 'Version of the built application'
+        value: ${{ jobs.build.outputs.version }}
+      artifact-name:
+        description: 'Name of the build artifact'
+        value: ${{ jobs.build.outputs.artifact-name }}
+    secrets:
+      BUILD_TOKEN:
+        description: 'Token for accessing build resources'
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact-name: ${{ steps.artifact.outputs.name }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ inputs.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: 'npm'
+        
+    - name: Create demo application
+      run: |
+        # Create package.json
+        cat << EOF > package.json
+        {
+          "name": "reusable-workflow-demo",
+          "version": "1.0.0",
+          "description": "Demo app for reusable workflow",
+          "main": "index.js",
+          "scripts": {
+            "test": "echo 'Running tests...' && node test.js",
+            "build": "node build.js",
+            "start": "node index.js"
+          },
+          "dependencies": {}
+        }
+        EOF
+        
+        # Create main application file
+        cat << 'EOF' > index.js
+        console.log('Hello from reusable workflow demo!');
+        console.log('Environment:', process.env.NODE_ENV || 'development');
+        console.log('Version:', require('./package.json').version);
+        console.log('Build time:', new Date().toISOString());
+        EOF
+        
+        # Create test file
+        cat << 'EOF' > test.js
+        // Simple test
+        const assert = require('assert');
+
+        function add(a, b) {
+          return a + b;
+        }
+
+        // Test the add function
+        assert.strictEqual(add(2, 3), 5, 'add(2, 3) should equal 5');
+        assert.strictEqual(add(-1, 1), 0, 'add(-1, 1) should equal 0');
+
+        console.log('All tests passed!');
+        EOF
+        
+        # Create build script
+        cat << 'EOF' > build.js
+        const fs = require('fs');
+        const path = require('path');
+
+        console.log('Building application...');
+
+        // Create dist directory
+        if (!fs.existsSync('dist')) {
+          fs.mkdirSync('dist');
+        }
+
+        // Copy main files to dist
+        fs.copyFileSync('index.js', 'dist/index.js');
+        fs.copyFileSync('package.json', 'dist/package.json');
+
+        // Create build info
+        const buildInfo = {
+          buildTime: new Date().toISOString(),
+          environment: process.env.NODE_ENV || 'development',
+          nodeVersion: process.version,
+          commit: process.env.GITHUB_SHA || 'unknown'
+        };
+
+        fs.writeFileSync('dist/build-info.json', JSON.stringify(buildInfo, null, 2));
+
+        console.log('Build completed successfully!');
+        console.log('Build info:', buildInfo);
+        EOF
+        
+    - name: Install dependencies
+      run: npm install --no-package-lock
+      
+    - name: Run tests
+      if: inputs.run-tests
+      run: npm test
+      
+    - name: Skip tests
+      if: ${{ !inputs.run-tests }}
+      run: echo "Tests skipped as requested"
+      
+    - name: Set environment
+      run: |
+        echo "NODE_ENV=${{ inputs.environment }}" >> $GITHUB_ENV
+        echo "Building for environment: ${{ inputs.environment }}"
+        
+    - name: Build application
+      run: npm run build
+      
+    - name: Generate version
+      id: version
+      run: |
+        # Generate a build version
+        timestamp=$(date +%Y%m%d%H%M%S)
+        short_sha=$(echo $GITHUB_SHA | cut -c1-8)
+        version="1.0.0-${{ inputs.environment }}-${timestamp}-${short_sha}"
+        echo "version=$version" >> $GITHUB_OUTPUT
+        echo "Generated version: $version"
+        
+        # Update package.json with new version
+        npm version $version --no-git-tag-version
+        
+    - name: Prepare artifact
+      id: artifact
+      run: |
+        artifact_name="build-${{ inputs.environment }}-${{ github.run_number }}"
+        echo "name=$artifact_name" >> $GITHUB_OUTPUT
+        
+        # Create final build package
+        mkdir -p artifacts
+        cp -r dist/* artifacts/
+        echo "Artifact prepared: $artifact_name"
+        
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ steps.artifact.outputs.name }}
+        path: artifacts/
+        retention-days: 30
+        
+    - name: Build summary
+      run: |
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Node.js Version**: ${{ inputs.node-version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tests Run**: ${{ inputs.run-tests }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Artifact Name**: ${{ steps.artifact.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Build completed successfully! 🎉" >> $GITHUB_STEP_SUMMARY

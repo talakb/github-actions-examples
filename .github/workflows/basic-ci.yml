@@ -1,0 +1,38 @@
+name: Basic CI
+
+# This workflow demonstrates a simple CI pipeline
+# Triggers: Push to main branch, Pull requests to main branch
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  basic-ci:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run a simple command
+      run: echo "Hello, World! This is a basic CI workflow."
+      
+    - name: Run multiple commands
+      run: |
+        echo "Running multiple commands..."
+        echo "Current directory: $(pwd)"
+        echo "Current date: $(date)"
+        echo "Available disk space:"
+        df -h
+        
+    - name: List files
+      run: ls -la
+      
+    - name: Show environment variables
+      run: |
+        echo "GITHUB_ACTOR: $GITHUB_ACTOR"
+        echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+        echo "GITHUB_REF: $GITHUB_REF"
+        echo "GITHUB_SHA: $GITHUB_SHA"
